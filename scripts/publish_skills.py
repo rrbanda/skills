@@ -55,12 +55,13 @@ def normalize_semver(version: Any) -> str:
     return v
 
 
-def derive_namespace(skill_dir: Path, repo_root: Path) -> str:
-    """Derive namespace from directory structure.
+def derive_namespace(skill_dir: Path, repo_root: Path, fm: dict[str, Any] | None = None) -> str:
+    """Derive namespace from frontmatter domain field, falling back to directory.
 
-    skills/<namespace>/<name>/SKILL.md  -> namespace
-    skills/<name>/SKILL.md              -> default
+    Priority: frontmatter 'domain' > directory name > 'default'
     """
+    if fm and "domain" in fm:
+        return str(fm["domain"])
     rel = skill_dir.relative_to(repo_root / "skills")
     parts = rel.parts
     if len(parts) >= 2:
@@ -95,7 +96,7 @@ def ensure_skill_yaml(skill_dir: Path, repo_root: Path) -> dict[str, Any] | None
         return None
 
     meta = fm.get("metadata", {}) if isinstance(fm.get("metadata"), dict) else {}
-    namespace = derive_namespace(skill_dir, repo_root)
+    namespace = derive_namespace(skill_dir, repo_root, fm)
     name = fm["name"]
     version = normalize_semver(meta.get("version", DEFAULT_VERSION))
     description = fm.get("description", "").strip()
@@ -128,6 +129,9 @@ def ensure_skill_yaml(skill_dir: Path, repo_root: Path) -> dict[str, Any] | None
     tags = fm.get("tags", [])
     if tags:
         skill_card["metadata"]["tags"] = tags
+
+    if fm.get("category"):
+        skill_card["metadata"]["compatibility"] = fm["category"]
 
     with open(yaml_path, "w") as f:
         yaml.dump(skill_card, f, default_flow_style=False, sort_keys=False)

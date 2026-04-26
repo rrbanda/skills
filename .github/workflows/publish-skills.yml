@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "skills/**"
+      - "scripts/**"
+      - ".github/workflows/**"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -105,6 +107,8 @@ jobs:
     needs: publish
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
+    env:
+      SKILL_CATALOG_URL: https://skillctl-catalog-skill-catalog.apps.ocp.v7hjl.sandbox2288.opentlc.com
     steps:
       - name: Checkout smp-agents
         uses: actions/checkout@v4
@@ -120,11 +124,13 @@ jobs:
         run: pip install neo4j pyyaml
 
       - name: Build knowledge graph
-        run: python scripts/build_knowledge_graph.py --skip-embeddings
+        run: |
+          python scripts/build_knowledge_graph.py \
+            --skip-embeddings \
+            --no-tls-verify
         env:
           NEO4J_URI: ${{ secrets.NEO4J_URI }}
           NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
-          SKILL_CATALOG_URL: ${{ env.CATALOG_URL }}
 
       - name: Graph summary
         if: always()
@@ -132,4 +138,4 @@ jobs:
           echo "### Knowledge Graph :brain:" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Neo4j sync and validation completed." >> "$GITHUB_STEP_SUMMARY"
-          echo "Catalog: $CATALOG_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "Catalog: $SKILL_CATALOG_URL" >> "$GITHUB_STEP_SUMMARY"

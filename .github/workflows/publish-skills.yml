@@ -1,0 +1,101 @@
+name: Publish Skills to OCI Registry
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "skills/**"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (validate only, no push)"
+        type: boolean
+        default: false
+      limit:
+        description: "Max skills to process (0 = all)"
+        type: number
+        default: 0
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: quay.io/rbrhssa/skills
+  CATALOG_URL: https://skillctl-catalog-skill-catalog.apps.ocp.v7hjl.sandbox2288.opentlc.com
+  SKILLCTL_VERSION: "0.3.0"
+
+jobs:
+  publish:
+    name: Pack & Publish Skills
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed skills
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "all_skills=true" >> "$GITHUB_OUTPUT"
+          else
+            CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- 'skills/' | head -1)
+            if [ -n "$CHANGED" ]; then
+              echo "all_skills=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "all_skills=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Install skillctl
+        if: steps.changes.outputs.all_skills == 'true'
+        run: |
+          curl -sL "https://github.com/redhat-et/skillimage/releases/download/v${SKILLCTL_VERSION}/skillctl_${SKILLCTL_VERSION}_linux_amd64.tar.gz" \
+            | tar xz
+          chmod +x skillctl
+          sudo mv skillctl /usr/local/bin/
+          skillctl --help | head -3
+
+      - name: Configure registry auth
+        if: steps.changes.outputs.all_skills == 'true'
+        run: |
+          mkdir -p ~/.docker
+          echo '{"auths":{"quay.io":{"auth":"'$(echo -n "${{ secrets.QUAY_USERNAME }}:${{ secrets.QUAY_PASSWORD }}" | base64)'"}}}' > ~/.docker/config.json
+
+      - name: Set up Python
+        if: steps.changes.outputs.all_skills == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python deps
+        if: steps.changes.outputs.all_skills == 'true'
+        run: pip install pyyaml
+
+      - name: Publish skills
+        if: steps.changes.outputs.all_skills == 'true'
+        run: |
+          DRY_RUN_FLAG=""
+          LIMIT_FLAG=""
+
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+
+          if [ "${{ inputs.limit }}" != "0" ] && [ -n "${{ inputs.limit }}" ]; then
+            LIMIT_FLAG="--limit ${{ inputs.limit }}"
+          fi
+
+          python scripts/publish_skills.py . \
+            --registry "$REGISTRY" \
+            --catalog-url "$CATALOG_URL" \
+            $DRY_RUN_FLAG $LIMIT_FLAG
+
+      - name: Summary
+        if: steps.changes.outputs.all_skills == 'true'
+        run: |
+          echo "### Skills Published :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Registry: \`$REGISTRY\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Catalog: $CATALOG_URL" >> "$GITHUB_STEP_SUMMARY"

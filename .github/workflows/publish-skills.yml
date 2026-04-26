@@ -99,3 +99,37 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Registry: \`$REGISTRY\`" >> "$GITHUB_STEP_SUMMARY"
           echo "Catalog: $CATALOG_URL" >> "$GITHUB_STEP_SUMMARY"
+
+  build-graph:
+    name: Build Knowledge Graph
+    needs: publish
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout smp-agents
+        uses: actions/checkout@v4
+        with:
+          repository: rrbanda/smp-agents
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install neo4j pyyaml
+
+      - name: Build knowledge graph
+        run: python scripts/build_knowledge_graph.py --skip-embeddings
+        env:
+          NEO4J_URI: ${{ secrets.NEO4J_URI }}
+          NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
+          SKILL_CATALOG_URL: ${{ env.CATALOG_URL }}
+
+      - name: Graph summary
+        if: always()
+        run: |
+          echo "### Knowledge Graph :brain:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Neo4j sync and validation completed." >> "$GITHUB_STEP_SUMMARY"
+          echo "Catalog: $CATALOG_URL" >> "$GITHUB_STEP_SUMMARY"

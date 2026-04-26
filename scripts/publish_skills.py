@@ -133,6 +133,13 @@ def ensure_skill_yaml(skill_dir: Path, repo_root: Path) -> dict[str, Any] | None
     if fm.get("category"):
         skill_card["metadata"]["compatibility"] = fm["category"]
 
+    if fm.get("tools"):
+        skill_card["metadata"]["tools"] = fm["tools"]
+    if fm.get("plugin"):
+        skill_card["metadata"]["plugin"] = fm["plugin"]
+    if fm.get("lang"):
+        skill_card["metadata"]["lang"] = fm["lang"]
+
     with open(yaml_path, "w") as f:
         yaml.dump(skill_card, f, default_flow_style=False, sort_keys=False)
     log.info("  generated skill.yaml")

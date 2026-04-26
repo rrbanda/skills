@@ -82,13 +82,8 @@ def discover_skills(repo_root: Path) -> list[Path]:
 
 
 def ensure_skill_yaml(skill_dir: Path, repo_root: Path) -> dict[str, Any] | None:
-    """Read or generate skill.yaml for a skill directory."""
+    """Generate skill.yaml from SKILL.md frontmatter (always regenerated)."""
     yaml_path = skill_dir / "skill.yaml"
-
-    if yaml_path.exists():
-        with open(yaml_path) as f:
-            return yaml.safe_load(f)
-
     skill_md = skill_dir / "SKILL.md"
     content = skill_md.read_text(encoding="utf-8")
     fm = parse_frontmatter(content)
@@ -194,13 +189,18 @@ def pack_tag_push(
     return True
 
 
-def trigger_sync(catalog_url: str) -> None:
+def trigger_sync(catalog_url: str, *, tls_verify: bool = True) -> None:
+    import ssl
+
     try:
         url = f"{catalog_url.rstrip('/')}/api/v1/sync"
         req = urllib.request.Request(url, method="POST")
-        ctx = __import__("ssl").create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = __import__("ssl").CERT_NONE
+        if tls_verify:
+            ctx = ssl.create_default_context()
+        else:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
         resp = urllib.request.urlopen(req, timeout=15, context=ctx)
         body = json.loads(resp.read().decode("utf-8"))
         log.info("Catalog sync triggered: %s", body)
@@ -265,7 +265,7 @@ def main() -> None:
             log.error("  %s", e)
 
     if pushed > 0 and args.catalog_url:
-        trigger_sync(args.catalog_url)
+        trigger_sync(args.catalog_url, tls_verify=not args.no_tls_verify)
 
     if errors:
         sys.exit(1)
